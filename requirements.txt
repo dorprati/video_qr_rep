@@ -1,0 +1,3 @@
+Flask==2.3.2
+eventlet==0.35.1
+qrcode==7.4.2

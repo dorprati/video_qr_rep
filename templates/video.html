@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Capture Frame</title>
+  <style>
+    body {
+      background: #000;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 2rem;
+      color: white;
+      font-family: sans-serif;
+    }
+
+    .checkbox-section {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      background-color: #111;
+      padding: 1rem 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    }
+
+    .checkbox-group label {
+      font-size: 1rem;
+    }
+
+    button {
+      padding: 1rem 2rem;
+      font-size: 1.5rem;
+      color: white;
+      background-color: #28a745;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 2rem;
+    }
+
+    button:active {
+      background-color: #218838;
+    }
+
+    .gallery {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .gallery img {
+      width: 300px;
+      max-width: 90vw;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+      cursor: pointer;
+    }
+
+    .frame-title {
+      text-align: center;
+      margin-top: 0.5rem;
+      font-size: 1rem;
+      color: #ccc;
+    }
+
+    .frame-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 999;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.9);
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 2rem;
+      color: white;
+      cursor: pointer;
+    }
+
+    #modalContainer {
+      position: relative;
+      display: inline-block;
+    }
+
+    #modalImage {
+      display: block;
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 10px;
+    }
+
+    #boxOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .box {
+      position: absolute;
+      border: 2px solid red;
+      box-sizing: border-box;
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+      pointer-events: auto;
+    }
+
+    .box:hover {
+      opacity: 1;
+    }
+
+    #boxOverlay::before {
+      content: "Loading boxes...";
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 1.2rem;
+      display: none;
+    }
+
+    #boxOverlay.loading::before {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="checkbox-section">
+    <div class="checkbox-group">
+      <label><input type="checkbox" name="gender" value="male"> Male</label>
+      <label><input type="checkbox" name="gender" value="female"> Female</label>
+    </div>
+    <div class="checkbox-group">
+      <label><input type="checkbox" name="age" value="20-30"> 20–30</label>
+      <label><input type="checkbox" name="age" value="30-40"> 30–40</label>
+      <label><input type="checkbox" name="age" value="40-50"> 40–50</label>
+      <label><input type="checkbox" name="age" value="50-60"> 50–60</label>
+      <label><input type="checkbox" name="age" value="65+"> 65+</label>
+    </div>
+  </div>
+
+  <button onclick="captureFrame()">📸 Capture Frame</button>
+
+  <div class="gallery" id="gallery"></div>
+
+  <div id="imageModal" class="modal" onclick="closeModal(event)">
+    <span class="modal-close" onclick="closeModal(event)">×</span>
+    <div id="modalContainer">
+      <img id="modalImage" src="" alt="Full frame with bounding boxes">
+      <div id="boxOverlay"></div>
+    </div>
+  </div>
+
+<script>
+let currentBoxes = [];
+let isModalOpen = false;
+let modalImg;
+
+function getSelectedCheckboxValues(name) {
+  return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(cb => cb.value);
+}
+
+async function captureFrame() {
+  try {
+    const currentTimeRaw = localStorage.getItem('currentVideoTime');
+    const currentTime = parseFloat(currentTimeRaw);
+
+    if (isNaN(currentTime)) {
+      alert("❌ No valid video time available.");
+      return;
+    }
+
+    const selectedGender = getSelectedCheckboxValues('gender');
+    const selectedAge = getSelectedCheckboxValues('age');
+
+    const response = await fetch('/capture-frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        time: currentTime,
+        gender: selectedGender,
+        age: selectedAge
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.status === "success" && data.images && data.images.length > 0) {
+      alert(`✅ Frame captured at #${data.frame}`);
+      displayFrames(data.images);
+    } else {
+      alert("❌ Failed to capture frame.");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    alert("❌ Error occurred during capture.");
+  }
+}
+
+function displayFrames(imageObjs) {
+  const gallery = document.getElementById("gallery");
+  gallery.innerHTML = '';
+
+  imageObjs.forEach((imageObj, index) => {
+    const container = document.createElement("div");
+    container.className = "frame-container";
+
+    const img = document.createElement("img");
+    img.src = imageObj.url;
+    img.dataset.frame = imageObj.frame;
+    img.alt = `Frame ${imageObj.frame}`;
+    img.onclick = () => openModal(imageObj.url, imageObj.frame);
+
+    const label = document.createElement("div");
+    label.className = "frame-title";
+    label.textContent = index === 0 && imageObjs.length === 2 ? "⬅️ Previous Frame" : "📍 Closest Frame";
+
+    container.appendChild(img);
+    container.appendChild(label);
+    gallery.appendChild(container);
+  });
+}
+
+async function openModal(src, frameNumber) {
+  const modal = document.getElementById('imageModal');
+  modalImg = document.getElementById('modalImage');
+  const overlay = document.getElementById('boxOverlay');
+
+  isModalOpen = true;
+
+  modalImg.onload = async () => {
+    fitOverlayToImage();
+    await loadCoordinates(frameNumber);
+  };
+
+  modalImg.src = src;
+
+  if (modalImg.complete) {
+    fitOverlayToImage();
+    await loadCoordinates(frameNumber);
+  }
+
+  modal.style.display = 'flex';
+}
+
+function fitOverlayToImage() {
+  const overlay = document.getElementById("boxOverlay");
+  overlay.style.width = modalImg.clientWidth + "px";
+  overlay.style.height = modalImg.clientHeight + "px";
+  overlay.style.top = modalImg.offsetTop + "px";
+  overlay.style.left = modalImg.offsetLeft + "px";
+}
+
+async function loadCoordinates(frameNumber) {
+  const overlay = document.getElementById("boxOverlay");
+  overlay.innerHTML = "";
+  overlay.classList.add("loading");
+
+  try {
+    const res = await fetch('/get-coordinates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frame: frameNumber }),
+    });
+
+    const data = await res.json();
+    overlay.classList.remove("loading");
+
+    if (data.status === 'success') {
+      currentBoxes = [];
+
+      data.coordinates.forEach(coordObj => {
+        const [x1, x2, y1, y2] = coordObj.box.split(',').map(Number);
+        const label = coordObj.label;
+        const link = coordObj.link;
+
+        const scaleX = modalImg.clientWidth / modalImg.naturalWidth;
+        const scaleY = modalImg.clientHeight / modalImg.naturalHeight;
+
+        const left = x1 * scaleX;
+        const top = y1 * scaleY;
+        const width = (x2 - x1) * scaleX;
+        const height = (y2 - y1) * scaleY;
+
+        const box = document.createElement("div");
+        box.className = "box";
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        box.style.width = `${width}px`;
+        box.style.height = `${height}px`;
+
+        const labelDiv = document.createElement("div");
+        labelDiv.textContent = label;
+        labelDiv.style.position = "absolute";
+        labelDiv.style.top = "-1.2em";
+        labelDiv.style.left = "0";
+        labelDiv.style.color = "white";
+        labelDiv.style.backgroundColor = "rgba(0,0,0,0.6)";
+        labelDiv.style.padding = "2px 6px";
+        labelDiv.style.fontSize = "0.8rem";
+        labelDiv.style.borderRadius = "4px";
+        labelDiv.style.whiteSpace = "nowrap";
+        box.appendChild(labelDiv);
+
+        if (link) {
+          box.style.cursor = "pointer";
+          box.onclick = (e) => {
+            e.stopPropagation();
+            window.open(link, '_blank');
+          };
+        }
+
+        overlay.appendChild(box);
+        currentBoxes.push({ box, left, top, width, height, label, link });
+      });
+    } else {
+      currentBoxes = [];
+    }
+  } catch (err) {
+    overlay.classList.remove("loading");
+    console.error("Error fetching coordinates:", err);
+  }
+}
+
+function closeModal(e) {
+  if (e.target.id === 'imageModal' || e.target.className === 'modal-close') {
+    document.getElementById('imageModal').style.display = 'none';
+    isModalOpen = false;
+
+    const overlay = document.getElementById("boxOverlay");
+    overlay.innerHTML = "";
+  }
+}
+</script>
+</body>
+</html>
