@@ -16,7 +16,7 @@
       font-family: sans-serif;
     }
 
-    .checkbox-section {
+    .dropdown-section {
       display: flex;
       gap: 2rem;
       margin-bottom: 1.5rem;
@@ -24,18 +24,32 @@
       justify-content: center;
     }
 
-    .checkbox-group {
+    .dropdown-group {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
       background-color: #111;
       padding: 1rem 1.5rem;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
     }
 
-    .checkbox-group label {
+    .dropdown-group label {
       font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .dropdown-group select {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background-color: #222;
+      color: white;
+      outline: none;
+    }
+
+    .dropdown-group select:focus {
+      border-color: #28a745;
     }
 
     button {
@@ -121,7 +135,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      pointer-events: none;
+      pointer-events: auto;
       z-index: 10;
     }
 
@@ -129,7 +143,7 @@
       position: absolute;
       border: 2px solid red;
       box-sizing: border-box;
-      opacity: 0;
+      opacity: 0.3;
       transition: opacity 0.2s ease-in-out;
       pointer-events: auto;
     }
@@ -156,39 +170,45 @@
 </head>
 <body>
 
-  <div class="checkbox-section">
-    <div class="checkbox-group">
-      <label><input type="checkbox" name="gender" value="male"> Male</label>
-      <label><input type="checkbox" name="gender" value="female"> Female</label>
-    </div>
-    <div class="checkbox-group">
-      <label><input type="checkbox" name="age" value="20-30"> 20–30</label>
-      <label><input type="checkbox" name="age" value="30-40"> 30–40</label>
-      <label><input type="checkbox" name="age" value="40-50"> 40–50</label>
-      <label><input type="checkbox" name="age" value="50-60"> 50–60</label>
-      <label><input type="checkbox" name="age" value="65+"> 65+</label>
-    </div>
+<div class="dropdown-section">
+  <div class="dropdown-group">
+    <label for="gender">Select Gender</label>
+    <select id="gender">
+      <option value="male" selected>Male</option>
+      <option value="female">Female</option>
+    </select>
   </div>
-
-  <button onclick="captureFrame()">📸 Capture Frame</button>
-
-  <div class="gallery" id="gallery"></div>
-
-  <div id="imageModal" class="modal" onclick="closeModal(event)">
-    <span class="modal-close" onclick="closeModal(event)">×</span>
-    <div id="modalContainer">
-      <img id="modalImage" src="" alt="Full frame with bounding boxes">
-      <div id="boxOverlay"></div>
-    </div>
+  <div class="dropdown-group">
+    <label for="age">Select Age</label>
+    <select id="age">
+      <option value="20-30" selected>20–30</option>
+      <option value="30-40">30–40</option>
+      <option value="40-50">40–50</option>
+      <option value="50-60">50–60</option>
+      <option value="65+">65+</option>
+    </select>
   </div>
+</div>
+
+<button onclick="captureFrame()">📸 Capture Frame</button>
+
+<div class="gallery" id="gallery"></div>
+
+<div id="imageModal" class="modal" onclick="closeModal(event)">
+  <span class="modal-close" onclick="closeModal(event)">×</span>
+  <div id="modalContainer">
+    <img id="modalImage" src="" alt="Full frame with bounding boxes">
+    <div id="boxOverlay"></div>
+  </div>
+</div>
 
 <script>
-let currentBoxes = [];
-let isModalOpen = false;
 let modalImg;
 
-function getSelectedCheckboxValues(name) {
-  return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(cb => cb.value);
+function getSelectedFilter() {
+  const gender = document.getElementById("gender").value;
+  const age = document.getElementById("age").value;
+  return { gender, age };
 }
 
 async function captureFrame() {
@@ -201,17 +221,18 @@ async function captureFrame() {
       return;
     }
 
-    const selectedGender = getSelectedCheckboxValues('gender');
-    const selectedAge = getSelectedCheckboxValues('age');
+    const selected = getSelectedFilter();
+
+    const requestBody = {
+      time: currentTime,
+      gender: [selected.gender],
+      age: [selected.age]
+    };
 
     const response = await fetch('/capture-frame', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        time: currentTime,
-        gender: selectedGender,
-        age: selectedAge
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const data = await response.json();
@@ -257,8 +278,6 @@ async function openModal(src, frameNumber) {
   modalImg = document.getElementById('modalImage');
   const overlay = document.getElementById('boxOverlay');
 
-  isModalOpen = true;
-
   modalImg.onload = async () => {
     fitOverlayToImage();
     await loadCoordinates(frameNumber);
@@ -287,41 +306,39 @@ async function loadCoordinates(frameNumber) {
   overlay.innerHTML = "";
   overlay.classList.add("loading");
 
+  const selected = getSelectedFilter();
+
+  const requestBody = {
+    frame: frameNumber,
+    gender: [selected.gender],
+    age: [selected.age]
+  };
+
   try {
     const res = await fetch('/get-coordinates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ frame: frameNumber }),
+      body: JSON.stringify(requestBody),
     });
 
     const data = await res.json();
     overlay.classList.remove("loading");
 
     if (data.status === 'success') {
-      currentBoxes = [];
-
       data.coordinates.forEach(coordObj => {
         const [x1, x2, y1, y2] = coordObj.box.split(',').map(Number);
-        const label = coordObj.label;
-        const link = coordObj.link;
-
         const scaleX = modalImg.clientWidth / modalImg.naturalWidth;
         const scaleY = modalImg.clientHeight / modalImg.naturalHeight;
 
-        const left = x1 * scaleX;
-        const top = y1 * scaleY;
-        const width = (x2 - x1) * scaleX;
-        const height = (y2 - y1) * scaleY;
-
         const box = document.createElement("div");
         box.className = "box";
-        box.style.left = `${left}px`;
-        box.style.top = `${top}px`;
-        box.style.width = `${width}px`;
-        box.style.height = `${height}px`;
+        box.style.left = `${x1 * scaleX}px`;
+        box.style.top = `${y1 * scaleY}px`;
+        box.style.width = `${(x2 - x1) * scaleX}px`;
+        box.style.height = `${(y2 - y1) * scaleY}px`;
 
         const labelDiv = document.createElement("div");
-        labelDiv.textContent = label;
+        labelDiv.textContent = coordObj.label;
         labelDiv.style.position = "absolute";
         labelDiv.style.top = "-1.2em";
         labelDiv.style.left = "0";
@@ -333,19 +350,16 @@ async function loadCoordinates(frameNumber) {
         labelDiv.style.whiteSpace = "nowrap";
         box.appendChild(labelDiv);
 
-        if (link) {
+        if (coordObj.link) {
           box.style.cursor = "pointer";
           box.onclick = (e) => {
             e.stopPropagation();
-            window.open(link, '_blank');
+            window.open(coordObj.link, '_blank');
           };
         }
 
         overlay.appendChild(box);
-        currentBoxes.push({ box, left, top, width, height, label, link });
       });
-    } else {
-      currentBoxes = [];
     }
   } catch (err) {
     overlay.classList.remove("loading");
@@ -356,8 +370,6 @@ async function loadCoordinates(frameNumber) {
 function closeModal(e) {
   if (e.target.id === 'imageModal' || e.target.className === 'modal-close') {
     document.getElementById('imageModal').style.display = 'none';
-    isModalOpen = false;
-
     const overlay = document.getElementById("boxOverlay");
     overlay.innerHTML = "";
   }
